@@ -2,6 +2,7 @@ package com.adewole.nairacore.auth.service;
 
 import com.adewole.nairacore.auth.entity.User;
 import com.adewole.nairacore.auth.repository.UserRepository;
+import com.adewole.nairacore.shared.config.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -26,7 +27,8 @@ public class UserDetailsServiceImpl implements UserDetailsService {
                         new UsernameNotFoundException("User not found: " + email)
                 );
 
-        return new org.springframework.security.core.userdetails.User(
+        return new UserPrincipal(
+                user.getId(),
                 user.getEmail(),
                 user.getPasswordHash(),
                 List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))

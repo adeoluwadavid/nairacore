@@ -151,4 +151,38 @@ public class AuthService {
                 .isActive(user.isActive())
                 .build();
     }
+
+    @Transactional
+    public UserResponse createUser(CreateUserRequest request) {
+
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new BadRequestException("Email already in use");
+        }
+
+        if (userRepository.existsByPhoneNumber(request.getPhoneNumber())) {
+            throw new BadRequestException("Phone number already in use");
+        }
+
+        Role role;
+        try {
+            role = Role.valueOf(request.getRole().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException(
+                    "Invalid role. Valid roles are: CUSTOMER, TELLER, ADMIN"
+            );
+        }
+
+        User user = User.builder()
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .email(request.getEmail())
+                .phoneNumber(request.getPhoneNumber())
+                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .role(role)
+                .build();
+
+        userRepository.save(user);
+
+        return mapToUserResponse(user);
+    }
 }

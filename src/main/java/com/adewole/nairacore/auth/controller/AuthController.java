@@ -1,6 +1,5 @@
 package com.adewole.nairacore.auth.controller;
 
-
 import com.adewole.nairacore.auth.dto.*;
 import com.adewole.nairacore.auth.service.AuthService;
 import com.adewole.nairacore.shared.response.ApiResponse;
@@ -8,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -55,5 +55,16 @@ public class AuthController {
         return ResponseEntity.ok(
                 ApiResponse.success("Logged out successfully", null)
         );
+    }
+
+    @PostMapping("/admin/create-user")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<UserResponse>> createUser(
+            @Valid @RequestBody CreateUserRequest request
+    ) {
+        UserResponse response = authService.createUser(request);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ApiResponse.success("User created successfully", response));
     }
 }
