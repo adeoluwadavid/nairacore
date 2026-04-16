@@ -3,6 +3,7 @@ package com.adewole.nairacore.auth.controller;
 import com.adewole.nairacore.auth.dto.*;
 import com.adewole.nairacore.auth.service.AuthService;
 import com.adewole.nairacore.shared.response.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -10,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "Authentication", description = "Endpoints for registration, login and token management")
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor

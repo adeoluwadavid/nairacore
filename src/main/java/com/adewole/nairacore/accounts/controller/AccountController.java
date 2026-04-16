@@ -6,6 +6,7 @@ import com.adewole.nairacore.auth.service.UserService;
 import com.adewole.nairacore.shared.config.UserPrincipal;
 import com.adewole.nairacore.shared.exception.BadRequestException;
 import com.adewole.nairacore.shared.response.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+@Tag(name = "Accounts", description = "Endpoints for account management and KYC")
 @RestController
 @RequestMapping("/api/v1/accounts")
 @RequiredArgsConstructor

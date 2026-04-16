@@ -1,4 +1,4 @@
-package com.adewole.nairacore.accounts.entity;
+package com.adewole.nairacore.transactions.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -15,36 +15,48 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "accounts", schema = "accounts")
-public class Account {
+@Table(name = "transactions", schema = "transactions")
+public class Transaction {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(updatable = false, nullable = false)
     private UUID id;
 
-    @Column(name = "user_id", nullable = false)
-    private UUID userId;
+    @Column(name = "reference", nullable = false, unique = true, length = 20)
+    private String reference;
 
-    @Column(name = "account_number", nullable = false, unique = true, length = 10)
-    private String accountNumber;
-
-    @Column(name = "account_name", nullable = false, length = 200)
-    private String accountName;
+    @Column(name = "idempotency_key", nullable = false, unique = true, length = 100)
+    private String idempotencyKey;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "account_type", nullable = false, length = 20)
-    private AccountType accountType;
+    @Column(name = "type", nullable = false, length = 20)
+    private TransactionType type;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
-    private AccountStatus status;
+    private TransactionStatus status;
 
-    @Column(name = "balance", nullable = false, precision = 19, scale = 4)
-    private BigDecimal balance;
+    @Column(name = "amount", nullable = false, precision = 19, scale = 4)
+    private BigDecimal amount;
 
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
+
+    @Column(name = "source_account_number", length = 10)
+    private String sourceAccountNumber;
+
+    @Column(name = "destination_account_number", length = 10)
+    private String destinationAccountNumber;
+
+    @Column(name = "description", length = 255)
+    private String description;
+
+    @Column(name = "failure_reason", length = 255)
+    private String failureReason;
+
+    @Column(name = "initiated_by", nullable = false)
+    private UUID initiatedBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -56,8 +68,7 @@ public class Account {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-        if (status == null) status = AccountStatus.ACTIVE;
-        if (balance == null) balance = BigDecimal.ZERO;
+        if (status == null) status = TransactionStatus.PENDING;
         if (currency == null) currency = "NGN";
     }
 
@@ -65,8 +76,4 @@ public class Account {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-
-    @Version
-    @Column(name = "version", nullable = false)
-    private Long version;
 }

@@ -1,0 +1,2 @@
+ALTER TABLE accounts.accounts
+    ADD COLUMN version BIGINT NOT NULL DEFAULT 0;
