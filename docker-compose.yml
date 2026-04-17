@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+
+  # ─── PostgreSQL ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:14-alpine
+    container_name: nairacore-postgres
+    environment:
+      POSTGRES_DB: nairacore
+      POSTGRES_USER: nairacore
+      POSTGRES_PASSWORD: nairacore
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nairacore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nairacore-network
+
+  # ─── RabbitMQ ─────────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: nairacore-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nairacore-network
+
+  # ─── Mailpit ──────────────────────────────────────────────────────
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: nairacore-mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - nairacore-network
+
+  # ─── NairaCore Application ────────────────────────────────────────
+  nairacore:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nairacore-app
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      JWT_SECRET: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      JWT_EXPIRATION: 900000
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - nairacore-network
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+
+networks:
+  nairacore-network:
+    driver: bridge

@@ -3,6 +3,10 @@ package com.adewole.nairacore.transactions.service;
 import com.adewole.nairacore.accounts.entity.Account;
 import com.adewole.nairacore.accounts.entity.AccountStatus;
 import com.adewole.nairacore.accounts.repository.AccountRepository;
+import com.adewole.nairacore.auth.entity.User;
+import com.adewole.nairacore.auth.repository.UserRepository;
+import com.adewole.nairacore.notifications.dto.TransactionEvent;
+import com.adewole.nairacore.notifications.service.TransactionEventPublisher;
 import com.adewole.nairacore.shared.exception.BadRequestException;
 import com.adewole.nairacore.shared.exception.ResourceNotFoundException;
 import com.adewole.nairacore.shared.exception.UnauthorizedException;
@@ -29,16 +33,19 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
     private final AccountRepository accountRepository;
+    private final TransactionEventPublisher eventPublisher;
+    private final UserRepository userRepository;
 
     private static final String BANK_PREFIX = "NRC";
 
     // ─── Deposit ─────────────────────────────────────────────────────
 
     @Transactional
-    public TransactionResponse deposit(DepositRequest request,
-                                       UUID initiatedBy,
-                                       String role) {
-
+    public TransactionResponse deposit(
+            DepositRequest request,
+            UUID initiatedBy,
+            String role
+    ) {
         if (transactionRepository.existsByIdempotencyKey(request.getIdempotencyKey())) {
             return transactionRepository
                     .findByIdempotencyKey(request.getIdempotencyKey())
@@ -47,9 +54,8 @@ public class TransactionService {
         }
 
         Account account = getActiveAccount(request.getAccountNumber());
-        validateAccountOwnership(account, initiatedBy, role); //
+        validateAccountOwnership(account, initiatedBy, role);
 
-        // Create transaction record
         Transaction transaction = Transaction.builder()
                 .reference(generateReference())
                 .idempotencyKey(request.getIdempotencyKey())
@@ -64,18 +70,15 @@ public class TransactionService {
         transactionRepository.save(transaction);
 
         try {
-            // Update status to processing
             transaction.setStatus(TransactionStatus.PROCESSING);
             transactionRepository.save(transaction);
 
             BigDecimal balanceBefore = account.getBalance();
             BigDecimal balanceAfter = balanceBefore.add(request.getAmount());
 
-            // Update account balance
             account.setBalance(balanceAfter);
             accountRepository.save(account);
 
-            // Create ledger entry
             createLedgerEntry(
                     transaction,
                     account.getAccountNumber(),
@@ -85,9 +88,11 @@ public class TransactionService {
                     balanceAfter
             );
 
-            // Mark success
             transaction.setStatus(TransactionStatus.SUCCESS);
             transactionRepository.save(transaction);
+
+            // Publish event AFTER success and balanceAfter is defined
+            publishEvent(transaction, account, balanceAfter, initiatedBy);
 
             log.info("Deposit successful. Reference: {}, Amount: {}, Account: {}",
                     transaction.getReference(),
@@ -114,9 +119,11 @@ public class TransactionService {
     // ─── Withdrawal ──────────────────────────────────────────────────
 
     @Transactional
-    public TransactionResponse withdraw(WithdrawalRequest request, UUID initiatedBy, String role) {
-
-        // Idempotency check
+    public TransactionResponse withdraw(
+            WithdrawalRequest request,
+            UUID initiatedBy,
+            String role
+    ) {
         if (transactionRepository.existsByIdempotencyKey(request.getIdempotencyKey())) {
             return transactionRepository
                     .findByIdempotencyKey(request.getIdempotencyKey())
@@ -127,7 +134,6 @@ public class TransactionService {
         Account account = getActiveAccount(request.getAccountNumber());
         validateAccountOwnership(account, initiatedBy, role);
 
-        // Check sufficient balance
         if (account.getBalance().compareTo(request.getAmount()) < 0) {
             throw new BadRequestException("Insufficient balance");
         }
@@ -167,6 +173,9 @@ public class TransactionService {
             transaction.setStatus(TransactionStatus.SUCCESS);
             transactionRepository.save(transaction);
 
+            // Publish event AFTER success
+            publishEvent(transaction, account, balanceAfter, initiatedBy);
+
             log.info("Withdrawal successful. Reference: {}, Amount: {}, Account: {}",
                     transaction.getReference(),
                     request.getAmount(),
@@ -192,9 +201,11 @@ public class TransactionService {
     // ─── Transfer ────────────────────────────────────────────────────
 
     @Transactional
-    public TransactionResponse transfer(TransferRequest request, UUID initiatedBy, String role) {
-
-        // Idempotency check
+    public TransactionResponse transfer(
+            TransferRequest request,
+            UUID initiatedBy,
+            String role
+    ) {
         if (transactionRepository.existsByIdempotencyKey(request.getIdempotencyKey())) {
             return transactionRepository
                     .findByIdempotencyKey(request.getIdempotencyKey())
@@ -215,7 +226,6 @@ public class TransactionService {
                 request.getDestinationAccountNumber()
         );
 
-        // Check sufficient balance
         if (sourceAccount.getBalance().compareTo(request.getAmount()) < 0) {
             throw new BadRequestException("Insufficient balance");
         }
@@ -273,6 +283,9 @@ public class TransactionService {
 
             transaction.setStatus(TransactionStatus.SUCCESS);
             transactionRepository.save(transaction);
+
+            // Publish event AFTER success — source account perspective
+            publishEvent(transaction, sourceAccount, sourceBalanceAfter, initiatedBy);
 
             log.info("Transfer successful. Reference: {}, Amount: {}, From: {}, To: {}",
                     transaction.getReference(),
@@ -410,6 +423,39 @@ public class TransactionService {
         if (!isOwner && !isPrivileged) {
             throw new UnauthorizedException(
                     "You do not have permission to transact on this account"
+            );
+        }
+    }
+
+    private void publishEvent(
+            Transaction transaction,
+            Account account,
+            BigDecimal balanceAfter,
+            UUID userId
+    ) {
+        try {
+            User user = userRepository.findById(userId).orElse(null);
+            if (user == null) return;
+
+            TransactionEvent event = TransactionEvent.builder()
+                    .userId(userId)
+                    .accountNumber(account.getAccountNumber())
+                    .transactionReference(transaction.getReference())
+                    .transactionType(transaction.getType())
+                    .amount(transaction.getAmount())
+                    .currency(transaction.getCurrency())
+                    .balanceAfter(balanceAfter)
+                    .description(transaction.getDescription())
+                    .transactionTime(transaction.getCreatedAt())
+                    .recipientEmail(user.getEmail())
+                    .recipientName(user.getFirstName() + " " + user.getLastName())
+                    .build();
+
+            eventPublisher.publishTransactionEvent(event);
+
+        } catch (Exception e) {
+            log.error("Failed to publish event for transaction: {}",
+                    transaction.getReference()
             );
         }
     }

@@ -1,7 +1,10 @@
 # NairaCore API Payloads
 
+> 🏠 **Back to project documentation** → [README.md](./README.md)
+
 > Base URL: `http://localhost:8080`
 > All protected endpoints require: `Authorization: Bearer {accessToken}`
+> Access tokens expire in **15 minutes** — login again if you get a 401.
 
 ---
 
@@ -10,7 +13,10 @@
 - [Auth Endpoints](#auth-endpoints)
 - [Account Endpoints](#account-endpoints)
 - [Transaction Endpoints](#transaction-endpoints)
+- [Notification Endpoints](#notification-endpoints)
 - [End-to-End Test Sequence](#end-to-end-test-sequence)
+- [Common Error Responses](#common-error-responses)
+- [Developer Tools](#developer-tools)
 
 ---
 
@@ -50,7 +56,7 @@ Access: Public
       "active": true
     }
   },
-  "timestamp": "2026-04-16T10:00:00"
+  "timestamp": "2026-04-17T10:00:00"
 }
 ```
 
@@ -67,25 +73,19 @@ Access: Public
   "password": "Password123"
 }
 ```
-**Response: 200 OK**
+**Response: 200 OK** — same structure as register response above.
+
+---
+
+### Login as Admin
+```
+POST /api/v1/auth/login
+Access: Public
+```
 ```json
 {
-  "success": true,
-  "message": "Login successful",
-  "data": {
-    "accessToken": "eyJhbGci...",
-    "refreshToken": "76482a6e-...",
-    "tokenType": "Bearer",
-    "expiresIn": 900,
-    "user": {
-      "id": "uuid",
-      "firstName": "David",
-      "lastName": "Adewole",
-      "email": "david@nairacore.com",
-      "role": "CUSTOMER",
-      "active": true
-    }
-  }
+  "email": "admin@nairacore.com",
+  "password": "Password123"
 }
 ```
 
@@ -101,7 +101,7 @@ Access: Public
   "refreshToken": "76482a6e-68c9-4073-9385-b8c221cd9365"
 }
 ```
-**Response: 200 OK** — returns new accessToken + new refreshToken
+**Response: 200 OK** — returns new accessToken + new refreshToken.
 
 ---
 
@@ -190,32 +190,6 @@ Authorization: Bearer {adminToken}
 
 ---
 
-### Validation Errors
-```
-POST /api/v1/auth/register
-```
-```json
-{
-  "firstName": "",
-  "email": "notanemail",
-  "password": "123"
-}
-```
-**Response: 400 Bad Request**
-```json
-{
-  "success": false,
-  "message": "Validation failed",
-  "data": {
-    "firstName": "First name is required",
-    "email": "Invalid email format",
-    "password": "Password must be at least 8 characters"
-  }
-}
-```
-
----
-
 ## Account Endpoints
 
 ### Create Account — Customer (Self)
@@ -233,7 +207,7 @@ Authorization: Bearer {customerToken}
 ```
 
 **Valid account types:** `SAVINGS` | `CURRENT` | `FIXED_DEPOSIT`
-**Valid currencies:** `NGN` | `USD` | `GBP` (3-letter ISO code)
+**Valid currencies:** `NGN` | `USD` | `GBP`
 
 **Response: 201 Created**
 ```json
@@ -249,7 +223,7 @@ Authorization: Bearer {customerToken}
     "status": "ACTIVE",
     "balance": 0.0000,
     "currency": "NGN",
-    "createdAt": "2026-04-16T10:00:00"
+    "createdAt": "2026-04-17T10:00:00"
   }
 }
 ```
@@ -271,7 +245,7 @@ Authorization: Bearer {tellerToken}
 }
 ```
 > `targetUserId` is required when TELLER or ADMIN creates an account.
-> It must be a valid UUID of an existing user.
+> Must be a valid UUID of an existing user.
 
 ---
 
@@ -282,34 +256,6 @@ Access: CUSTOMER
 Authorization: Bearer {customerToken}
 ```
 No body required.
-
-**Response: 200 OK**
-```json
-{
-  "success": true,
-  "message": "Accounts retrieved successfully",
-  "data": [
-    {
-      "id": "uuid",
-      "accountNumber": "0123100000",
-      "accountName": "David Adewole",
-      "accountType": "SAVINGS",
-      "status": "ACTIVE",
-      "balance": 45000.0000,
-      "currency": "NGN"
-    },
-    {
-      "id": "uuid",
-      "accountNumber": "0123100001",
-      "accountName": "David Adewole",
-      "accountType": "CURRENT",
-      "status": "ACTIVE",
-      "balance": 30000.0000,
-      "currency": "NGN"
-    }
-  ]
-}
-```
 
 ---
 
@@ -337,23 +283,6 @@ GET /api/v1/accounts/0123100000/balance
 ```
 No body required.
 
-**Response: 200 OK**
-```json
-{
-  "success": true,
-  "message": "Balance retrieved successfully",
-  "data": {
-    "id": "uuid",
-    "accountNumber": "0123100000",
-    "accountName": "David Adewole",
-    "accountType": "SAVINGS",
-    "status": "ACTIVE",
-    "balance": 45000.0000,
-    "currency": "NGN"
-  }
-}
-```
-
 ---
 
 ### Deactivate Account
@@ -368,19 +297,6 @@ PUT /api/v1/accounts/74a3aed3-4ae5-43b7-b050-17af0ae81b73/deactivate
 > Note: `{accountId}` is the UUID of the account, not the account number.
 
 No body required.
-
-**Response: 200 OK**
-```json
-{
-  "success": true,
-  "message": "Account deactivated successfully",
-  "data": {
-    "id": "uuid",
-    "accountNumber": "0123100000",
-    "status": "CLOSED"
-  }
-}
-```
 
 ---
 
@@ -404,34 +320,10 @@ Authorization: Bearer {customerToken}
 }
 ```
 
-> **Required fields:** `bvn`, `address`, `city`, `state`
-> **Optional fields:** `nin`, `dateOfBirth`, `idType`, `idNumber`, `idExpiryDate`
+> **Required:** `bvn`, `address`, `city`, `state`
+> **Optional:** `nin`, `dateOfBirth`, `idType`, `idNumber`, `idExpiryDate`
 > **BVN format:** exactly 11 digits, numbers only
-> **NIN format:** exactly 11 digits, numbers only
 > **Date format:** `YYYY-MM-DD`
-
-**Response: 201 Created**
-```json
-{
-  "success": true,
-  "message": "KYC submitted successfully",
-  "data": {
-    "id": "uuid",
-    "userId": "uuid",
-    "bvn": "12345678901",
-    "nin": "98765432101",
-    "dateOfBirth": "1990-05-15",
-    "address": "12 Awolowo Road",
-    "city": "Ibadan",
-    "state": "Oyo",
-    "idType": "NATIONAL_ID",
-    "idNumber": "AB1234567",
-    "idExpiryDate": "2028-12-31",
-    "isVerified": false,
-    "createdAt": "2026-04-16T10:00:00"
-  }
-}
-```
 
 ---
 
@@ -448,7 +340,7 @@ No body required.
 ## Transaction Endpoints
 
 > **Important:** Every transaction requires a unique `idempotencyKey`.
-> Generate a new UUID for each new transaction attempt.
+> Generate a new UUID for each new transaction.
 > Reuse the same UUID to test idempotency (retry simulation).
 
 ---
@@ -464,7 +356,7 @@ Authorization: Bearer {anyToken}
   "accountNumber": "0123100000",
   "amount": 50000.00,
   "description": "Initial deposit",
-  "idempotencyKey": "550e8400-e29b-41d4-a716-446655440000"
+  "idempotencyKey": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 }
 ```
 
@@ -488,10 +380,13 @@ Authorization: Bearer {anyToken}
     "description": "Initial deposit",
     "failureReason": null,
     "initiatedBy": "uuid",
-    "createdAt": "2026-04-16T10:00:00"
+    "createdAt": "2026-04-17T10:00:00"
   }
 }
 ```
+
+> After a successful deposit an email notification is sent to the account
+> owner and visible in Mailpit at `http://localhost:8025`
 
 ---
 
@@ -506,7 +401,7 @@ Authorization: Bearer {anyToken}
   "accountNumber": "0123100000",
   "amount": 5000.00,
   "description": "ATM withdrawal",
-  "idempotencyKey": "660e8400-e29b-41d4-a716-446655440001"
+  "idempotencyKey": "b2c3d4e5-f6a7-8901-bcde-f12345678901"
 }
 ```
 
@@ -533,7 +428,7 @@ Authorization: Bearer {anyToken}
   "destinationAccountNumber": "0123100001",
   "amount": 10000.00,
   "description": "Transfer to current account",
-  "idempotencyKey": "770e8400-e29b-41d4-a716-446655440002"
+  "idempotencyKey": "c3d4e5f6-a7b8-9012-cdef-123456789012"
 }
 ```
 
@@ -572,40 +467,6 @@ GET /api/v1/transactions/account/0123100000
 ```
 No body required.
 
-**Response: 200 OK**
-```json
-{
-  "success": true,
-  "message": "Transactions retrieved successfully",
-  "data": [
-    {
-      "id": "uuid",
-      "reference": "NRC100002",
-      "type": "TRANSFER",
-      "status": "SUCCESS",
-      "amount": 10000.0000,
-      "currency": "NGN",
-      "sourceAccountNumber": "0123100000",
-      "destinationAccountNumber": "0123100001",
-      "description": "Transfer to current account",
-      "createdAt": "2026-04-16T10:05:00"
-    },
-    {
-      "id": "uuid",
-      "reference": "NRC100001",
-      "type": "WITHDRAWAL",
-      "status": "SUCCESS",
-      "amount": 5000.0000,
-      "currency": "NGN",
-      "sourceAccountNumber": "0123100000",
-      "destinationAccountNumber": null,
-      "description": "ATM withdrawal",
-      "createdAt": "2026-04-16T10:03:00"
-    }
-  ]
-}
-```
-
 ---
 
 ### Get Ledger Entries
@@ -633,21 +494,73 @@ No body required.
       "amount": 10000.0000,
       "balanceBefore": 45000.0000,
       "balanceAfter": 35000.0000,
-      "createdAt": "2026-04-16T10:05:00"
-    },
-    {
-      "id": "uuid",
-      "transactionReference": "NRC100001",
-      "accountNumber": "0123100000",
-      "entryType": "DEBIT",
-      "amount": 5000.0000,
-      "balanceBefore": 50000.0000,
-      "balanceAfter": 45000.0000,
-      "createdAt": "2026-04-16T10:03:00"
+      "createdAt": "2026-04-17T10:05:00"
     }
   ]
 }
 ```
+
+---
+
+## Notification Endpoints
+
+### Get My Notifications
+```
+GET /api/v1/notifications
+Access: CUSTOMER only
+Authorization: Bearer {customerToken}
+```
+No body required.
+
+**Response: 200 OK**
+```json
+{
+  "success": true,
+  "message": "Notifications retrieved successfully",
+  "data": [
+    {
+      "id": "uuid",
+      "userId": "uuid",
+      "accountNumber": "0123100000",
+      "transactionReference": "NRC100000",
+      "type": "DEPOSIT_SUCCESS",
+      "channel": "EMAIL",
+      "recipient": "david@nairacore.com",
+      "subject": "Deposit Successful — NRC100000",
+      "message": "Dear David Adewole, your account 0123100000 has been credited with NGN 50,000.00. Available balance: NGN 50,000.00. Reference: NRC100000.",
+      "status": "SENT",
+      "failureReason": null,
+      "createdAt": "2026-04-17T10:00:00"
+    }
+  ]
+}
+```
+
+> View actual email content in Mailpit at `http://localhost:8025`
+
+---
+
+### Get Notifications By Transaction Reference
+```
+GET /api/v1/notifications/transaction/{reference}
+Access: TELLER, ADMIN only
+Authorization: Bearer {tellerToken or adminToken}
+
+Example:
+GET /api/v1/notifications/transaction/NRC100000
+```
+No body required.
+
+**Notification types:**
+
+| Type | Trigger |
+|---|---|
+| DEPOSIT_SUCCESS | Successful deposit |
+| WITHDRAWAL_SUCCESS | Successful withdrawal |
+| TRANSFER_DEBIT | Successful transfer (sender) |
+| TRANSFER_CREDIT | Successful transfer (receiver) |
+| ACCOUNT_CREATED | New account opened |
+| KYC_SUBMITTED | KYC details submitted |
 
 ---
 
@@ -668,8 +581,8 @@ Follow this order for a complete system test:
 | 9 | David gets his accounts | customerToken | 200 — list of 2 accounts |
 | 10 | Get account by number | customerToken | 200 |
 | 11 | Get balance (should be 0) | customerToken | 200 — balance: 0.0000 |
-| 12 | Deposit ₦50,000 into savings | customerToken | 201 — status: SUCCESS |
-| 13 | Deposit ₦20,000 into current | customerToken | 201 — status: SUCCESS |
+| 12 | Deposit ₦50,000 into savings | customerToken | 201 — check Mailpit for email |
+| 13 | Deposit ₦20,000 into current | customerToken | 201 — check Mailpit for email |
 | 14 | Retry step 12 (same idempotencyKey) | customerToken | 201 — same reference, balance unchanged |
 | 15 | Withdraw ₦5,000 from savings | customerToken | 201 — balance: 45000.0000 |
 | 16 | Withdraw ₦999,999 (insufficient) | customerToken | 400 — Insufficient balance |
@@ -678,33 +591,46 @@ Follow this order for a complete system test:
 | 19 | Get transaction by reference | customerToken | 200 — full details |
 | 20 | Get ledger entries | adminToken | 200 — debit/credit entries |
 | 21 | Get David's KYC | customerToken | 200 |
-| 22 | View another customer's account | customerToken | 401 — no permission |
+| 22 | Get my notifications | customerToken | 200 — list of notification logs |
+| 23 | Get notifications by reference | adminToken | 200 — notification for that transaction |
+| 24 | View another customer's account | customerToken | 401 — no permission |
 
 ---
 
 ## Common Error Responses
 
-### 400 Bad Request
+### 400 Bad Request — Validation Failed
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "data": {
+    "email": "Invalid email format",
+    "password": "Password must be at least 8 characters"
+  }
+}
+```
+
+### 400 Bad Request — Business Rule
 ```json
 {
   "success": false,
   "message": "Email already in use",
   "data": null,
-  "timestamp": "2026-04-16T10:00:00"
+  "timestamp": "2026-04-17T10:00:00"
 }
 ```
 
-### 401 Unauthorized
+### 401 Unauthorized — Wrong Credentials
 ```json
 {
   "success": false,
   "message": "Invalid email or password",
-  "data": null,
-  "timestamp": "2026-04-16T10:00:00"
+  "data": null
 }
 ```
 
-### 401 Token Expired
+### 401 Unauthorized — Token Expired
 ```json
 {
   "success": false,
@@ -720,8 +646,7 @@ Returned when accessing a protected endpoint without a token.
 {
   "success": false,
   "message": "Account not found: 0123999999",
-  "data": null,
-  "timestamp": "2026-04-16T10:00:00"
+  "data": null
 }
 ```
 
@@ -730,8 +655,7 @@ Returned when accessing a protected endpoint without a token.
 {
   "success": false,
   "message": "An unexpected error occurred",
-  "data": null,
-  "timestamp": "2026-04-16T10:00:00"
+  "data": null
 }
 ```
 
@@ -742,12 +666,26 @@ Returned when accessing a protected endpoint without a token.
 Use these for testing. Each must be unique per new transaction:
 
 ```
-550e8400-e29b-41d4-a716-446655440000  → deposit 1
-550e8400-e29b-41d4-a716-446655440001  → deposit 2
-660e8400-e29b-41d4-a716-446655440002  → withdrawal 1
-660e8400-e29b-41d4-a716-446655440003  → withdrawal 2
-770e8400-e29b-41d4-a716-446655440004  → transfer 1
-770e8400-e29b-41d4-a716-446655440005  → transfer 2
+a1b2c3d4-e5f6-7890-abcd-ef1234567890  → deposit 1
+b2c3d4e5-f6a7-8901-bcde-f12345678901  → deposit 2
+c3d4e5f6-a7b8-9012-cdef-123456789012  → deposit 3
+d4e5f6a7-b8c9-0123-defa-234567890123  → withdrawal 1
+e5f6a7b8-c9d0-1234-efab-345678901234  → withdrawal 2
+f6a7b8c9-d0e1-2345-fabc-456789012345  → transfer 1
+a7b8c9d0-e1f2-3456-abcd-567890123456  → transfer 2
+b8c9d0e1-f2a3-4567-bcde-678901234567  → transfer 3
 ```
 
 Generate new ones at: https://www.uuidgenerator.net
+
+---
+
+## Developer Tools
+
+| Tool | URL | Purpose |
+|---|---|---|
+| Swagger UI | http://localhost:8080/swagger-ui/index.html | Test all API endpoints |
+| RabbitMQ UI | http://localhost:15672 | Monitor message queues |
+| Mailpit UI | http://localhost:8025 | View sent emails |
+
+> 🏠 **Back to project documentation** → [README.md](./README.md)

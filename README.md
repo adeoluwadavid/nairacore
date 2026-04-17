@@ -2,7 +2,9 @@
 
 A comprehensive core banking system built with Java Spring Boot, implementing real-world
 financial operations including account management, transactions, double-entry bookkeeping,
-and role-based access control.
+role-based access control, and event-driven notifications.
+
+> 📋 **API Payloads & Test Guide** → [PAYLOADS.md](./PAYLOADS.md)
 
 ---
 
@@ -14,11 +16,13 @@ and role-based access control.
 - [Modules](#modules)
 - [Database Design](#database-design)
 - [Security](#security)
-- [API Documentation](#api-documentation)
 - [Getting Started](#getting-started)
+- [Running With Docker](#running-with-docker)
+- [Running Locally](#running-locally)
 - [Environment Configuration](#environment-configuration)
-- [Running the Application](#running-the-application)
+- [API Documentation](#api-documentation)
 - [API Reference](#api-reference)
+- [Developer Tools](#developer-tools)
 
 ---
 
@@ -34,6 +38,7 @@ Key financial concepts implemented:
 - **Idempotency** — retrying a transaction never results in duplicate processing
 - **Optimistic locking** — concurrent balance updates are handled safely
 - **Immutable audit trail** — ledger entries are never updated or deleted
+- **Event-driven notifications** — decoupled email notifications via RabbitMQ
 
 ---
 
@@ -60,6 +65,21 @@ standalone microservice by changing only the communication layer from in-process
 calls to HTTP or messaging. This mirrors how companies like Shopify scaled —
 monolith first, extract only when a boundary proves it needs independent scaling.
 
+### Notification Architecture
+
+```
+TransactionService
+→ publishEvent() after SUCCESS
+→ RabbitMQ Exchange (nairacore.transactions)
+→ Queue (nairacore.notifications)
+→ NotificationConsumer
+→ JavaMailSender → Mailpit (local) / SendGrid (production)
+→ NotificationLog saved to database
+```
+
+Failed messages go to the Dead Letter Queue (`nairacore.notifications.dlq`)
+for investigation and reprocessing.
+
 ---
 
 ## Technology Stack
@@ -69,12 +89,14 @@ monolith first, extract only when a boundary proves it needs independent scaling
 | Language | Java 17 |
 | Framework | Spring Boot 4.x |
 | Security | Spring Security 7.x + JWT |
-| Database | PostgreSQL |
+| Database | PostgreSQL 14 |
 | Migrations | Flyway |
 | ORM | Spring Data JPA / Hibernate |
-| Messaging | RabbitMQ |
+| Messaging | RabbitMQ 4.x |
+| Email (local) | Mailpit |
 | Documentation | SpringDoc OpenAPI 3.x (Swagger UI) |
 | Build Tool | Maven |
+| Containerization | Docker + Docker Compose |
 
 ---
 
@@ -112,6 +134,16 @@ The core financial engine.
 - Complete transaction history per account
 - Ledger entries restricted to TELLER and ADMIN
 
+### Notifications Module
+Event-driven notification system.
+
+- RabbitMQ-based event publishing after every successful transaction
+- Email notifications for DEPOSIT, WITHDRAWAL, TRANSFER
+- Notification log persisted in database with SENT/FAILED status
+- Dead Letter Queue for failed notifications
+- Mailpit integration for local email testing
+- Decoupled from transaction processing — notification failure never affects transactions
+
 ---
 
 ## Database Design
@@ -138,14 +170,17 @@ nairacore (database)
 **UUIDs over sequential IDs** — prevents ID enumeration attacks common in financial APIs.
 
 **No cross-schema foreign keys** — schemas are logically independent. Relationships
-are maintained at the application level via userId references, not database constraints.
-This makes future extraction to microservices straightforward.
+are maintained at the application level via userId references. This makes future
+extraction to microservices straightforward.
 
 **Append-only ledger** — ledger_entries has no updated_at column. Records are
 created once and never modified. This provides an immutable audit trail.
 
 **NUMERIC(19,4) for money** — exact decimal storage. Floating point numbers cannot
 represent decimal values exactly in binary, making them unsuitable for financial amounts.
+
+**Sequence-based account numbers** — PostgreSQL sequences guarantee uniqueness
+atomically. No collision risk, no retry loops. Format: `0123XXXXXX` (10 digits).
 
 ---
 
@@ -180,6 +215,8 @@ Access token expiry:
 | Deactivate account | ❌ | ✅ | ✅ |
 | View ledger entries | ❌ | ✅ | ✅ |
 | Submit KYC | ✅ | — | — |
+| View own notifications | ✅ | — | — |
+| View notifications by reference | ❌ | ✅ | ✅ |
 
 ### JWT Security
 - HS256 signing algorithm
@@ -189,28 +226,19 @@ Access token expiry:
 
 ---
 
-## API Documentation
-
-Interactive Swagger UI available at:
-```
-http://localhost:8080/swagger-ui/index.html
-```
-
-OpenAPI JSON spec:
-```
-http://localhost:8080/api-docs
-```
-
----
-
 ## Getting Started
 
 ### Prerequisites
 
+**For Docker setup (recommended):**
+- Docker Desktop
+
+**For local setup:**
 - Java 17+
 - Maven 3.8+
 - PostgreSQL 14+
-- RabbitMQ 3.x (or Docker)
+- RabbitMQ 3.x
+- Mailpit
 
 ### Clone the Repository
 ```bash
@@ -218,40 +246,83 @@ git clone https://github.com/adewole/nairacore.git
 cd nairacore
 ```
 
-### Create the Database
+---
+
+## Running With Docker
+
+The easiest way to run NairaCore. One command starts everything.
+
+```bash
+docker compose up --build
+```
+
+This starts four services:
+
+| Service | Port |
+|---|---|
+| NairaCore API | 8080 |
+| PostgreSQL | 5433 |
+| RabbitMQ | 5672 (UI: 15672) |
+| Mailpit | 8025 (SMTP: 1025) |
+
+Flyway runs all migrations automatically on startup.
+A super admin is seeded automatically via migration V5.
+
+### Stop Services
+```bash
+docker compose down
+```
+
+### Stop and Remove All Data
+```bash
+docker compose down -v
+```
+
+### Default Admin Credentials
+```
+Email:    admin@nairacore.com
+Password: Password123
+```
+Change this before any real deployment.
+
+---
+
+## Running Locally
+
+### 1. Create the Database
 ```sql
 CREATE DATABASE nairacore;
+```
+
+### 2. Start RabbitMQ
+```bash
+docker run -d --name rabbitmq \
+  -p 5672:5672 -p 15672:15672 \
+  rabbitmq:3-management
+```
+
+### 3. Start Mailpit
+```bash
+mailpit
+```
+
+### 4. Run the Application
+```bash
+./mvnw spring-boot:run
 ```
 
 ---
 
 ## Environment Configuration
 
-Create `src/main/resources/application.yml` with your local values:
+Key properties in `application.yml`:
 
 ```yaml
 spring:
-  application:
-    name: nairacore
-
   datasource:
     url: jdbc:postgresql://localhost:5432/nairacore
     username: your_postgres_username
     password: your_postgres_password
-    driver-class-name: org.postgresql.Driver
-
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    show-sql: false
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
 
   rabbitmq:
     host: localhost
@@ -259,36 +330,38 @@ spring:
     username: guest
     password: guest
 
-server:
-  port: 8080
+  mail:
+    host: localhost
+    port: 1025
 
 jwt:
-  secret: your_256_bit_hex_secret_here
+  secret: your_256_bit_hex_secret
   expiration: 900000
 ```
 
-> **Never commit credentials to version control.** Use environment variables
-> or a secrets manager in production.
+> **Never commit credentials to version control.**
+> Use environment variables or a secrets manager in production.
+
+### Docker Environment Variables
+
+| Variable | Description |
+|---|---|
+| `JWT_SECRET` | 256-bit hex secret for JWT signing |
+| `JWT_EXPIRATION` | Access token expiry in milliseconds |
+| `SPRING_PROFILES_ACTIVE` | Active Spring profile (docker) |
 
 ---
 
-## Running the Application
+## API Documentation
 
-```bash
-# Build the project
-mvn clean install
-
-# Run the application
-mvn spring-boot:run
+Interactive Swagger UI:
+```
+http://localhost:8080/swagger-ui/index.html
 ```
 
-Flyway will automatically create all schemas and tables on first run.
-A super admin is seeded automatically via `V5__seed_super_admin.sql`.
-
-**Default Admin Credentials:**
+OpenAPI JSON spec:
 ```
-Email:    admin@nairacore.com
-Password: (set in migration — change immediately in production)
+http://localhost:8080/api-docs
 ```
 
 ---
@@ -327,6 +400,27 @@ Password: (set in migration — change immediately in production)
 | GET | /api/v1/transactions/{reference} | ALL | Get transaction by reference |
 | GET | /api/v1/transactions/account/{accountNumber} | ALL | Transaction history |
 | GET | /api/v1/transactions/ledger/{accountNumber} | TELLER, ADMIN | Ledger entries |
+
+### Notification Endpoints
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| GET | /api/v1/notifications | CUSTOMER | Get own notifications |
+| GET | /api/v1/notifications/transaction/{reference} | TELLER, ADMIN | Get by reference |
+
+> 📋 For full request/response payloads and test sequences → [PAYLOADS.md](./PAYLOADS.md)
+
+---
+
+## Developer Tools
+
+| Tool | URL | Credentials |
+|---|---|---|
+| Swagger UI | http://localhost:8080/swagger-ui/index.html | JWT token |
+| RabbitMQ UI | http://localhost:15672 | guest / guest |
+| Mailpit UI | http://localhost:8025 | none required |
+| pgAdmin (local) | localhost:5432 | your credentials |
+| pgAdmin (Docker) | localhost:5433 | nairacore / nairacore |
 
 ---
 
