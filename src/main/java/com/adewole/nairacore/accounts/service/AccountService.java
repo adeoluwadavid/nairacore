@@ -31,6 +31,11 @@ public class AccountService {
             UUID userId
     ) {
         AccountType accountType;
+        if (request.getAccountType() == null) {
+            throw new BadRequestException(
+                    "Invalid account type. Valid types are: SAVINGS, CURRENT, FIXED_DEPOSIT"
+            );
+        }
         try {
             accountType = AccountType.valueOf(request.getAccountType().toUpperCase());
         } catch (IllegalArgumentException e) {
@@ -58,9 +63,9 @@ public class AccountService {
                 .currency(request.getCurrency() != null ? request.getCurrency() : "NGN")
                 .build();
 
-        accountRepository.save(account);
+        Account saved = accountRepository.save(account);
+        return mapToAccountResponse(saved);
 
-        return mapToAccountResponse(account);
     }
 
     // ─── Get Account By Account Number ───────────────────────────────
@@ -138,9 +143,9 @@ public class AccountService {
         }
 
         account.setStatus(AccountStatus.CLOSED);
-        accountRepository.save(account);
 
-        return mapToAccountResponse(account);
+        Account saved = accountRepository.save(account);
+        return mapToAccountResponse(saved);
     }
 
     // ─── Submit KYC ──────────────────────────────────────────────────
