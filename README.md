@@ -427,6 +427,4 @@ http://localhost:8080/api-docs
 ## Author
 
 **David Adewole**
-Senior Software Engineer
-Ibadan, Nigeria
 adeoluwadavid@gmail.com
